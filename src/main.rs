@@ -6,8 +6,25 @@ use std::{
 use anyhow::anyhow;
 use itertools::Itertools;
 use mcping::JavaResponse;
-use poise::serenity_prelude as serenity;
-use serenity::all::{EventHandler, Ready};
+use serenity::all::{ClientBuilder, Context, EventHandler, GatewayIntents, Ready};
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    tracing_subscriber::fmt::init();
+
+    let token = std::env::var("DISCORD_TOKEN").map_err(|_| env_err("DISCORD_TOKEN"))?;
+    let intents = GatewayIntents::non_privileged();
+
+    let minecraft_server_ping_handler = MinecraftServerPingHandler::from_env()?;
+
+    let mut client = ClientBuilder::new(token, intents)
+        .event_handler(minecraft_server_ping_handler)
+        .await?;
+
+    client.start().await?;
+
+    Ok(())
+}
 
 #[derive(Debug)]
 struct MinecraftServerPingHandler {
@@ -51,7 +68,7 @@ impl MinecraftServerPingHandler {
 
 #[serenity::async_trait]
 impl EventHandler for MinecraftServerPingHandler {
-    async fn ready(&self, ctx: serenity::Context, _: Ready) {
+    async fn ready(&self, ctx: Context, _: Ready) {
         use serenity::gateway::ActivityData;
         use serenity::model::user::OnlineStatus;
 
@@ -122,24 +139,6 @@ fn format_minecraft_server_status(
     }
 
     status
-}
-
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt::init();
-
-    let token = std::env::var("DISCORD_TOKEN").map_err(|_| env_err("DISCORD_TOKEN"))?;
-    let intents = serenity::GatewayIntents::non_privileged();
-
-    let minecraft_server_ping_handler = MinecraftServerPingHandler::from_env()?;
-
-    let mut client = serenity::ClientBuilder::new(token, intents)
-        .event_handler(minecraft_server_ping_handler)
-        .await?;
-
-    client.start().await?;
-
-    Ok(())
 }
 
 fn env_err(env_var: &str) -> anyhow::Error {
