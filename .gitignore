@@ -1,4 +1,8 @@
-**/target
-**/result
-**/.envrc
-**/.direnv
+target/
+result/
+.envrc
+.direnv/
+assets/
+**/.env
+*.sqlite3.db
+config.toml
