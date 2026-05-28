@@ -1,5 +1,5 @@
 {
-  description = "hijacker2 nix flake";
+  description = "schizoid nix flake";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -17,6 +17,16 @@
         packages = rec {
           schizoid = pkgs.callPackage ./package.nix {};
           default = schizoid;
+        };
+
+        devShells.default = pkgs.mkShell {
+          buildInputs = with pkgs; [
+            pkg-config
+
+            bashInteractive
+            sqlx-cli
+            sqlite
+          ];
         };
       };
 
