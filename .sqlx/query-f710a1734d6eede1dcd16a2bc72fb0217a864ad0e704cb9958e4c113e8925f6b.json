@@ -1,0 +1,44 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT * FROM members WHERE user_id = ? AND guild_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "user_id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "guild_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "greeting_enabled",
+        "ordinal": 2,
+        "type_info": "Bool"
+      },
+      {
+        "name": "last_greeting",
+        "ordinal": 3,
+        "type_info": "Datetime"
+      },
+      {
+        "name": "last_birthday_congratulation",
+        "ordinal": 4,
+        "type_info": "Datetime"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "f710a1734d6eede1dcd16a2bc72fb0217a864ad0e704cb9958e4c113e8925f6b"
+}

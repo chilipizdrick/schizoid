@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE members SET last_birthday_congratulation = ?\n           WHERE user_id = ? AND guild_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "67d4f8cf2039186a4c2f8b5747ce8b8ad3a281fe1b0af5718963ec0c548bd474"
+}

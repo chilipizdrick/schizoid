@@ -1,0 +1,44 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT * FROM guilds WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "greeting_enabled",
+        "ordinal": 1,
+        "type_info": "Bool"
+      },
+      {
+        "name": "birthday_enabled",
+        "ordinal": 2,
+        "type_info": "Bool"
+      },
+      {
+        "name": "greeting_interval",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "timezone",
+        "ordinal": 4,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "ed5e1c3efa756d9645f2084a6ebbca6de211577af8acde80d202008b0689eb25"
+}

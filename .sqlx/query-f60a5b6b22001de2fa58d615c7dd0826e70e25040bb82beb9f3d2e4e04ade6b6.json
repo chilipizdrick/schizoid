@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE members SET last_greeting = ?\n           WHERE user_id = ? AND guild_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "f60a5b6b22001de2fa58d615c7dd0826e70e25040bb82beb9f3d2e4e04ade6b6"
+}

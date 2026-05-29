@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO members (user_id, guild_id, greeting_enabled, last_greeting, last_birthday_congratulation)\n                    VALUES ( ?, ?, ?, ?, ? )",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "025f7c4d6df2038783ca6d20b02511540497c1b8f9eb8163a86b66bfa08ec48c"
+}
