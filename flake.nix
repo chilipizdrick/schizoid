@@ -22,6 +22,8 @@
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
             pkg-config
+            openssl
+            libopus
 
             bashInteractive
             sqlx-cli
