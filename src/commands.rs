@@ -220,7 +220,11 @@ pub async fn color(ctx: PContext<'_>, color: String) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[command(slash_command, guild_only, ephemeral)]
+#[command(
+    slash_command,
+    guild_only,
+    default_member_permissions = "ADMINISTRATOR"
+)]
 pub async fn set_timezone(ctx: PContext<'_>, timezone: String) -> anyhow::Result<()> {
     let timezone: Tz = timezone.parse()?;
 
