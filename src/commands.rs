@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::anyhow;
+use chrono_tz::Tz;
 use poise::command;
 use serenity::all::{Attachment, ChannelId, Color, EditRole, GuildId, Member, UserId};
 use sqlx::query;
@@ -215,6 +216,29 @@ pub async fn color(ctx: PContext<'_>, color: String) -> anyhow::Result<()> {
         color.hex()
     ))
     .await?;
+
+    Ok(())
+}
+
+#[command(slash_command, guild_only, ephemeral)]
+pub async fn set_timezone(ctx: PContext<'_>, timezone: String) -> anyhow::Result<()> {
+    let timezone: Tz = timezone.parse()?;
+
+    let guild_id = ctx.guild_id().unwrap();
+    let data = ctx.serenity_context().data.read().await;
+    let db_conn = data.get::<DBConnKey>().unwrap();
+
+    let guild_id_str = guild_id.to_string();
+    let timezone_str = timezone.to_string();
+    query!(
+        "UPDATE guilds SET timezone = ? WHERE id = ?",
+        timezone_str,
+        guild_id_str,
+    )
+    .execute(&db_conn.pool)
+    .await?;
+
+    ctx.reply(format!("Set timezone to {timezone}.")).await?;
 
     Ok(())
 }

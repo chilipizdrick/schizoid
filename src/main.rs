@@ -41,6 +41,7 @@ async fn main() -> anyhow::Result<()> {
             set_greeting(),
             set_birthday_congratulation(),
             color(),
+            set_timezone(),
         ],
         ..Default::default()
     };
