@@ -39,6 +39,7 @@ async fn main() -> anyhow::Result<()> {
             unset_birthday(),
             unset_user_birthday(),
             set_greeting(),
+            set_my_greeting(),
             set_birthday_congratulation(),
             color(),
             set_timezone(),
