@@ -24,8 +24,8 @@
             pkg-config
             openssl
             libopus
+            cmake
 
-            bashInteractive
             sqlx-cli
             sqlite
           ];
