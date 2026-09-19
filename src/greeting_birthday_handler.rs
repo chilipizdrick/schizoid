@@ -4,7 +4,7 @@ use sqlx::query;
 
 use crate::{
     database::{DBConnKey, DatabaseConnection, Guild, Member, MonthDayDate, User},
-    get_config, guild_birthday_congratulation_filepath, guild_greeting_filepath,
+    get_config, greeting_filepath, guild_birthday_congratulation_filepath,
 };
 
 /// Hander for greeting and congratulating on birthdays
@@ -70,7 +70,7 @@ async fn voice_state_update_fallible(
     };
 
     let audio_file_path = match strategy {
-        Strategy::Greeting => guild_greeting_filepath(file_storage_path, guild_id)?,
+        Strategy::Greeting => greeting_filepath(file_storage_path, guild_id, user_id)?,
         Strategy::Congratulation => {
             guild_birthday_congratulation_filepath(file_storage_path, guild_id)?
         }
@@ -81,7 +81,10 @@ async fn voice_state_update_fallible(
     let client = songbird::get(&ctx).await.unwrap();
 
     let call = client.join(guild_id, channel_id).await?;
-    let _ = call.lock().await.play_only_input(audio_file.into());
+    let _ = match strategy {
+        Strategy::Greeting => call.lock().await.play_input(audio_file.into()),
+        Strategy::Congratulation => call.lock().await.play_only_input(audio_file.into()),
+    };
 
     // Update last greeting timestamp anyway, even if the user was congratulated
     update_last_greeting(db_conn, user_id, guild_id).await?;

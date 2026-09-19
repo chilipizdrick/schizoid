@@ -11,7 +11,8 @@ use crate::{
     PContext,
     config::Config,
     database::{DBConnKey, MonthDayDate},
-    guild_birthday_congratulation_filepath, guild_greeting_filepath,
+    guild_birthday_congratulation_filepath, guild_greeting_filepath, guild_speciffic_dir_path,
+    member_speciffic_dir_path,
 };
 
 #[command(slash_command)]
@@ -160,6 +161,17 @@ pub async fn set_greeting(ctx: PContext<'_>, attachment: Attachment) -> anyhow::
     Ok(())
 }
 
+#[command(slash_command, guild_only, ephemeral)]
+pub async fn set_my_greeting(ctx: PContext<'_>, attachment: Attachment) -> anyhow::Result<()> {
+    let content = attachment.download().await?;
+    let filename = attachment.filename;
+    // set_guild_greeting(ctx, &filename, content).await?;
+    set_member_greeting(ctx, &filename, content).await?;
+    ctx.reply(format!("Set your greeting to {filename}."))
+        .await?;
+    Ok(())
+}
+
 #[command(
     slash_command,
     guild_only,
@@ -263,6 +275,14 @@ async fn set_guild_greeting(
     set_guild_audio_file(ctx, "greetings", filename, content).await
 }
 
+async fn set_member_greeting(
+    ctx: PContext<'_>,
+    filename: &str,
+    content: Vec<u8>,
+) -> anyhow::Result<()> {
+    set_member_audio_file(ctx, "greetings", filename, content).await
+}
+
 async fn set_guild_birthday_congratulation(
     ctx: PContext<'_>,
     filename: &str,
@@ -275,15 +295,36 @@ async fn set_guild_audio_file(
     ctx: PContext<'_>,
     subdir: &str,
     filename: &str,
-    content: Vec<u8>,
+    contents: Vec<u8>,
 ) -> anyhow::Result<()> {
     let config = get_config(ctx).await;
     let storage_path = &config.file_storage_path;
     let guild_id = ctx.guild_id().unwrap();
-    let dir_path: PathBuf = [storage_path, subdir, &guild_id.to_string()]
-        .iter()
-        .collect();
+    let dir_path = guild_speciffic_dir_path(storage_path, subdir, guild_id);
 
+    create_dir_at_path_and_write_file_there(dir_path, filename, contents).await
+}
+
+async fn set_member_audio_file(
+    ctx: PContext<'_>,
+    subdir: &str,
+    filename: &str,
+    contents: Vec<u8>,
+) -> anyhow::Result<()> {
+    let config = get_config(ctx).await;
+    let storage_path = &config.file_storage_path;
+    let guild_id = ctx.guild_id().unwrap();
+    let user_id = ctx.author().id;
+    let dir_path = member_speciffic_dir_path(storage_path, subdir, guild_id, user_id);
+
+    create_dir_at_path_and_write_file_there(dir_path, filename, contents).await
+}
+
+async fn create_dir_at_path_and_write_file_there(
+    dir_path: PathBuf,
+    filename: &str,
+    contents: Vec<u8>,
+) -> anyhow::Result<()> {
     // This is done to ensure that the directory is empty before writing to it
     if exists(&dir_path).await {
         fs::remove_dir_all(&dir_path).await?;
@@ -292,7 +333,7 @@ async fn set_guild_audio_file(
     fs::create_dir_all(&dir_path).await?;
 
     let filepath = dir_path.join(filename);
-    fs::write(&filepath, content).await?;
+    fs::write(&filepath, contents).await?;
 
     Ok(())
 }
@@ -334,6 +375,7 @@ async fn unset_birthday_for_user(ctx: PContext<'_>, user_id: UserId) -> anyhow::
     Ok(())
 }
 
+/// Plays audio in user's voice channel, if he is connected to one
 async fn play_only_audio_optionally_in_voice_channel(
     ctx: PContext<'_>,
     audio_file_path: PathBuf,
