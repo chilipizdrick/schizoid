@@ -11,7 +11,7 @@ use crate::{
     PContext,
     config::Config,
     database::{DBConnKey, MonthDayDate},
-    guild_birthday_congratulation_filepath, guild_greeting_filepath, guild_speciffic_dir_path,
+    greeting_filepath, guild_birthday_congratulation_filepath, guild_speciffic_dir_path,
     member_speciffic_dir_path,
 };
 
@@ -24,8 +24,9 @@ pub async fn ping(ctx: PContext<'_>) -> anyhow::Result<()> {
 #[command(slash_command, guild_only, ephemeral)]
 pub async fn greet(ctx: PContext<'_>, voice_channel: Option<ChannelId>) -> anyhow::Result<()> {
     let guild_id = ctx.guild_id().unwrap();
+    let user_id = ctx.author().id;
     let file_storage_path = &get_config(ctx).await.file_storage_path;
-    let filepath = guild_greeting_filepath(file_storage_path, guild_id)?;
+    let filepath = greeting_filepath(file_storage_path, guild_id, user_id)?;
 
     play_only_audio_optionally_in_voice_channel(ctx, filepath, voice_channel).await?;
 
