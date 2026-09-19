@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE members SET greeting_enabled = ? WHERE guild_id = ? and user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "37b16f6d17483aee857fdfcc376ebe240282fa395ffb709be7dbc4f9f1c2efba"
+}

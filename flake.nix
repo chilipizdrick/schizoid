@@ -29,6 +29,8 @@
             sqlx-cli
             sqlite
           ];
+
+          DATABASE_URL = "sqlite://db.sqlite3.db";
         };
       };
 

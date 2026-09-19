@@ -82,6 +82,36 @@ pub async fn toggle_server_greeting(ctx: PContext<'_>) -> anyhow::Result<()> {
     Ok(())
 }
 
+#[command(slash_command, guild_only, ephemeral)]
+pub async fn toggle_my_greeting(ctx: PContext<'_>) -> anyhow::Result<()> {
+    let guild_id = ctx.guild_id().unwrap();
+    let user_id = ctx.author().id;
+    let data = ctx.serenity_context().data.read().await;
+    let db_conn = data.get::<DBConnKey>().unwrap();
+
+    let member = db_conn.get_or_insert_member(user_id, guild_id).await?;
+
+    let user_id_str = member.user_id.to_string();
+    let guild_id_str = member.guild_id.to_string();
+    let new_greeting_state = !member.greeting_enabled;
+    query!(
+        "UPDATE members SET greeting_enabled = ? WHERE guild_id = ? and user_id = ?",
+        new_greeting_state,
+        guild_id_str,
+        user_id_str,
+    )
+    .execute(&db_conn.pool)
+    .await?;
+
+    let reply = match new_greeting_state {
+        true => "Greetings for you are enabled.",
+        false => "Greetings for you are disabled.",
+    };
+    ctx.reply(reply).await?;
+
+    Ok(())
+}
+
 #[command(
     slash_command,
     guild_only,
@@ -154,7 +184,7 @@ pub async fn unset_user_birthday(ctx: PContext<'_>, member: Member) -> anyhow::R
     guild_only,
     default_member_permissions = "ADMINISTRATOR"
 )]
-pub async fn set_greeting(ctx: PContext<'_>, attachment: Attachment) -> anyhow::Result<()> {
+pub async fn set_server_greeting(ctx: PContext<'_>, attachment: Attachment) -> anyhow::Result<()> {
     let content = attachment.download().await?;
     let filename = attachment.filename;
     set_guild_greeting(ctx, &filename, content).await?;
