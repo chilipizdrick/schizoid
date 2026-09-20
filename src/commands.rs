@@ -1,18 +1,15 @@
-use std::path::{Path, PathBuf};
-
 use anyhow::anyhow;
 use chrono_tz::Tz;
 use poise::command;
 use serenity::all::{Attachment, ChannelId, Color, EditRole, GuildId, Member, UserId};
+use songbird::input::Input;
 use sqlx::query;
-use tokio::fs;
 
 use crate::{
     PContext,
     config::Config,
     database::{DBConnKey, MonthDayDate},
-    greeting_filepath, guild_birthday_congratulation_filepath, guild_speciffic_dir_path,
-    member_speciffic_dir_path,
+    storage::{self, RemovalResult},
 };
 
 #[command(slash_command)]
@@ -25,10 +22,9 @@ pub async fn ping(ctx: PContext<'_>) -> anyhow::Result<()> {
 pub async fn greet(ctx: PContext<'_>, voice_channel: Option<ChannelId>) -> anyhow::Result<()> {
     let guild_id = ctx.guild_id().unwrap();
     let user_id = ctx.author().id;
-    let file_storage_path = &get_config(ctx).await.file_storage_path;
-    let filepath = greeting_filepath(file_storage_path, guild_id, user_id)?;
-
-    play_only_audio_optionally_in_voice_channel(ctx, filepath, voice_channel).await?;
+    let storage = get_config(ctx).await.storage();
+    let input = storage.get_member_greeting(guild_id, user_id).await?;
+    play_only_audio_optionally_in_voice_channel(ctx, input, voice_channel).await?;
 
     ctx.reply("Greeting...").await?;
 
@@ -41,12 +37,11 @@ pub async fn congratulate(
     voice_channel: Option<ChannelId>,
 ) -> anyhow::Result<()> {
     let guild_id = ctx.guild_id().unwrap();
-    let file_storage_path = &get_config(ctx).await.file_storage_path;
-    let filepath = guild_birthday_congratulation_filepath(file_storage_path, guild_id)?;
+    let storage = get_config(ctx).await.storage();
+    let input = storage.get_guild_congratulation(guild_id).await?;
+    play_only_audio_optionally_in_voice_channel(ctx, input, voice_channel).await?;
 
-    play_only_audio_optionally_in_voice_channel(ctx, filepath, voice_channel).await?;
-
-    ctx.reply("Congratulating...").await?;
+    ctx.reply("Congratulations!").await?;
 
     Ok(())
 }
@@ -185,21 +180,73 @@ pub async fn unset_user_birthday(ctx: PContext<'_>, member: Member) -> anyhow::R
     default_member_permissions = "ADMINISTRATOR"
 )]
 pub async fn set_server_greeting(ctx: PContext<'_>, attachment: Attachment) -> anyhow::Result<()> {
-    let content = attachment.download().await?;
-    let filename = attachment.filename;
-    set_guild_greeting(ctx, &filename, content).await?;
-    ctx.reply(format!("Set greeting to {filename}.")).await?;
+    check_attachment_size(ctx, &attachment).await?;
+
+    let guild_id = ctx.guild_id().unwrap();
+    let storage = get_config(ctx).await.storage();
+
+    let file = storage::File::from_attachment(&attachment).await?;
+    storage.set_guild_greeting(guild_id, file).await?;
+
+    ctx.reply(format!("Set server greeting to {}.", attachment.filename))
+        .await?;
+    Ok(())
+}
+
+#[command(
+    slash_command,
+    guild_only,
+    default_member_permissions = "ADMINISTRATOR"
+)]
+pub async fn remove_server_greeting(ctx: PContext<'_>) -> anyhow::Result<()> {
+    let guild_id = ctx.guild_id().unwrap();
+    let storage = get_config(ctx).await.storage();
+
+    let result = storage.remove_guild_greeting(guild_id).await?;
+
+    let reply = match result {
+        RemovalResult::Existed => "Server greeting was removed.",
+        RemovalResult::DidNotExist => "Server greeting did not exist.",
+    };
+
+    ctx.reply(reply).await?;
     Ok(())
 }
 
 #[command(slash_command, guild_only, ephemeral)]
 pub async fn set_my_greeting(ctx: PContext<'_>, attachment: Attachment) -> anyhow::Result<()> {
-    let content = attachment.download().await?;
-    let filename = attachment.filename;
-    // set_guild_greeting(ctx, &filename, content).await?;
-    set_member_greeting(ctx, &filename, content).await?;
-    ctx.reply(format!("Set your greeting to {filename}."))
+    check_attachment_size(ctx, &attachment).await?;
+
+    let guild_id = ctx.guild_id().unwrap();
+    let user_id = ctx.author().id;
+    let storage = get_config(ctx).await.storage();
+
+    let file = storage::File::from_attachment(&attachment).await?;
+    storage.set_member_greeting(guild_id, user_id, file).await?;
+
+    ctx.reply(format!("Set your greeting to {}.", attachment.filename))
         .await?;
+    Ok(())
+}
+
+#[command(
+    slash_command,
+    guild_only,
+    default_member_permissions = "ADMINISTRATOR"
+)]
+pub async fn remove_my_greeting(ctx: PContext<'_>) -> anyhow::Result<()> {
+    let guild_id = ctx.guild_id().unwrap();
+    let user_id = ctx.author().id;
+    let storage = get_config(ctx).await.storage();
+
+    let result = storage.remove_member_greeting(guild_id, user_id).await?;
+
+    let reply = match result {
+        RemovalResult::Existed => "Your greeting was removed.",
+        RemovalResult::DidNotExist => "Your greeting did not exist.",
+    };
+
+    ctx.reply(reply).await?;
     Ok(())
 }
 
@@ -212,10 +259,39 @@ pub async fn set_birthday_congratulation(
     ctx: PContext<'_>,
     attachment: Attachment,
 ) -> anyhow::Result<()> {
-    let content = attachment.download().await?;
-    let filename = attachment.filename;
-    set_guild_birthday_congratulation(ctx, &filename, content).await?;
-    ctx.reply(format!("Set greeting to {filename}.")).await?;
+    check_attachment_size(ctx, &attachment).await?;
+    let guild_id = ctx.guild_id().unwrap();
+
+    let file = storage::File::from_attachment(&attachment).await?;
+    let storage = get_config(ctx).await.storage();
+
+    storage.set_guild_congratulation(guild_id, file).await?;
+
+    ctx.reply(format!(
+        "Set server birthday congratulation to {}.",
+        attachment.filename
+    ))
+    .await?;
+    Ok(())
+}
+
+#[command(
+    slash_command,
+    guild_only,
+    default_member_permissions = "ADMINISTRATOR"
+)]
+pub async fn remove_birthday_congratulation(ctx: PContext<'_>) -> anyhow::Result<()> {
+    let guild_id = ctx.guild_id().unwrap();
+    let storage = get_config(ctx).await.storage();
+
+    let result = storage.remove_guild_congratulation(guild_id).await?;
+
+    let reply = match result {
+        RemovalResult::Existed => "Server birthday congratulation was removed.",
+        RemovalResult::DidNotExist => "Server birthday congratulation did not exist.",
+    };
+
+    ctx.reply(reply).await?;
     Ok(())
 }
 
@@ -298,81 +374,6 @@ fn parse_hex_color(color: &str) -> anyhow::Result<u32> {
     Ok(u32::from_str_radix(color, 16)?)
 }
 
-async fn set_guild_greeting(
-    ctx: PContext<'_>,
-    filename: &str,
-    content: Vec<u8>,
-) -> anyhow::Result<()> {
-    set_guild_audio_file(ctx, "greetings", filename, content).await
-}
-
-async fn set_member_greeting(
-    ctx: PContext<'_>,
-    filename: &str,
-    content: Vec<u8>,
-) -> anyhow::Result<()> {
-    set_member_audio_file(ctx, "greetings", filename, content).await
-}
-
-async fn set_guild_birthday_congratulation(
-    ctx: PContext<'_>,
-    filename: &str,
-    content: Vec<u8>,
-) -> anyhow::Result<()> {
-    set_guild_audio_file(ctx, "birthday_congratulations", filename, content).await
-}
-
-async fn set_guild_audio_file(
-    ctx: PContext<'_>,
-    subdir: &str,
-    filename: &str,
-    contents: Vec<u8>,
-) -> anyhow::Result<()> {
-    let config = get_config(ctx).await;
-    let storage_path = &config.file_storage_path;
-    let guild_id = ctx.guild_id().unwrap();
-    let dir_path = guild_speciffic_dir_path(storage_path, subdir, guild_id);
-
-    create_dir_at_path_and_write_file_there(dir_path, filename, contents).await
-}
-
-async fn set_member_audio_file(
-    ctx: PContext<'_>,
-    subdir: &str,
-    filename: &str,
-    contents: Vec<u8>,
-) -> anyhow::Result<()> {
-    let config = get_config(ctx).await;
-    let storage_path = &config.file_storage_path;
-    let guild_id = ctx.guild_id().unwrap();
-    let user_id = ctx.author().id;
-    let dir_path = member_speciffic_dir_path(storage_path, subdir, guild_id, user_id);
-
-    create_dir_at_path_and_write_file_there(dir_path, filename, contents).await
-}
-
-async fn create_dir_at_path_and_write_file_there(
-    dir_path: PathBuf,
-    filename: &str,
-    contents: Vec<u8>,
-) -> anyhow::Result<()> {
-    // This is done to ensure that the directory is empty before writing to it
-    if exists(&dir_path).await {
-        fs::remove_dir_all(&dir_path).await?;
-    }
-
-    fs::create_dir_all(&dir_path).await?;
-
-    let filepath = dir_path.join(filename);
-    fs::write(&filepath, contents).await?;
-
-    Ok(())
-}
-
-async fn exists(path: impl AsRef<Path>) -> bool {
-    fs::metadata(path).await.is_ok()
-}
-
 async fn set_birthday_for_user(
     ctx: PContext<'_>,
     user_id: UserId,
@@ -409,7 +410,7 @@ async fn unset_birthday_for_user(ctx: PContext<'_>, user_id: UserId) -> anyhow::
 /// Plays audio in user's voice channel, if he is connected to one
 async fn play_only_audio_optionally_in_voice_channel(
     ctx: PContext<'_>,
-    audio_file_path: PathBuf,
+    input: Input,
     voice_channel_id: Option<ChannelId>,
 ) -> anyhow::Result<()> {
     let (guild_id, voice_channel_id) = {
@@ -428,7 +429,7 @@ async fn play_only_audio_optionally_in_voice_channel(
         (guild.id, channel_id)
     };
 
-    play_only_audio_in_voice_channel(ctx, guild_id, voice_channel_id, audio_file_path).await?;
+    play_only_audio_in_voice_channel(ctx, guild_id, voice_channel_id, input).await?;
 
     Ok(())
 }
@@ -437,14 +438,23 @@ async fn play_only_audio_in_voice_channel(
     ctx: PContext<'_>,
     guild_id: GuildId,
     voice_channel_id: ChannelId,
-    audio_file_path: PathBuf,
+    input: Input,
 ) -> anyhow::Result<()> {
-    let input = songbird::input::File::new(audio_file_path);
     let client = songbird::get(ctx.serenity_context()).await.unwrap().clone();
     let call = client.join(guild_id, voice_channel_id).await?;
     let mut call_lock = call.lock().await;
-    let _ = call_lock.play_only_input(input.into());
+    let _ = call_lock.play_only_input(input);
 
+    Ok(())
+}
+
+async fn check_attachment_size(ctx: PContext<'_>, attachment: &Attachment) -> anyhow::Result<()> {
+    let config = get_config(ctx).await;
+    if attachment.size as u64 > config.max_attachment_size {
+        return Err(anyhow!(
+            "The attachment size is bigger than configured maximum!"
+        ));
+    }
     Ok(())
 }
 

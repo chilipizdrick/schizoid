@@ -4,7 +4,7 @@ use sqlx::query;
 
 use crate::{
     database::{DBConnKey, DatabaseConnection, Guild, Member, MonthDayDate, User},
-    get_config, greeting_filepath, guild_birthday_congratulation_filepath,
+    get_config,
 };
 
 /// Hander for greeting and congratulating on birthdays
@@ -61,7 +61,8 @@ async fn voice_state_update_fallible(
     let should_congratulate = should_congratulate(&guild, &member, &user);
     log::debug!("Should greet: {should_greet:?}, should congratulate: {should_congratulate:?}");
 
-    let file_storage_path = &get_config(&ctx).await.file_storage_path;
+    let storage = get_config(&ctx).await.storage();
+    // let file_storage_path = &get_config(&ctx).await.file_storage_path;
 
     let strategy = match (should_greet, should_congratulate) {
         (_, true) => Strategy::Congratulation,
@@ -69,15 +70,10 @@ async fn voice_state_update_fallible(
         (false, false) => return Ok(()),
     };
 
-    let audio_file_path = match strategy {
-        Strategy::Greeting => greeting_filepath(file_storage_path, guild_id, user_id)?,
-        Strategy::Congratulation => {
-            guild_birthday_congratulation_filepath(file_storage_path, guild_id)?
-        }
+    let audio_file = match strategy {
+        Strategy::Greeting => storage.get_member_greeting(guild_id, user_id).await?,
+        Strategy::Congratulation => storage.get_guild_congratulation(guild_id).await?,
     };
-
-    let audio_file = songbird::input::File::new(audio_file_path);
-
     let client = songbird::get(&ctx).await.unwrap();
 
     let call = client.join(guild_id, channel_id).await?;

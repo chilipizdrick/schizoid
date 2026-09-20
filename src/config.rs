@@ -2,7 +2,7 @@ use clap::Parser;
 use serde::{Deserialize, Serialize};
 use serenity::prelude::TypeMapKey;
 
-use crate::args::Args;
+use crate::{args::Args, storage::Storage};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -19,6 +19,10 @@ impl Config {
         let config_string = std::fs::read_to_string(args.config_path)?;
         let config = toml::from_str(&config_string)?;
         Ok(config)
+    }
+
+    pub fn storage<'a>(&'a self) -> Storage<'a> {
+        Storage::new(&self.file_storage_path)
     }
 }
 
