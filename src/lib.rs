@@ -5,6 +5,7 @@ pub mod database;
 pub mod greeting_birthday_handler;
 pub mod minecraft_server_handler;
 pub mod storage;
+pub mod voice_clip_recorder;
 
 use std::env;
 

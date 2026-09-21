@@ -22,7 +22,7 @@ User should also provide a custom config in toml format (and provide path to it 
 
 ```toml
 file_storage_path = "./assets"   # Necessary | Path to directory where custom audio assets are stored
-max_attachment_size = 10_000_000 # Necessary | Maximum size of attachments in bytes (!NOT YET IMPELEMENTED!)
+max_attachment_size = 10_000_000 # Necessary | Maximum size of attachments in bytes
 max_attachment_count = 100       # Necessary | Maximum number of attachments for a discord server (!NOT YET IMPELEMENTED!)
 
 [minecraft_server_ping]

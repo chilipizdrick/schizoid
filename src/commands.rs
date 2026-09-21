@@ -1,8 +1,13 @@
+use std::{num::ParseIntError, sync::Arc};
+
 use anyhow::anyhow;
 use chrono_tz::Tz;
-use poise::command;
-use serenity::all::{Attachment, ChannelId, Color, EditRole, GuildId, Member, UserId};
-use songbird::input::Input;
+use poise::{CreateReply, command};
+use serenity::{
+    all::{Attachment, ChannelId, Color, EditRole, GuildId, Member, UserId},
+    builder::CreateAttachment,
+};
+use songbird::{CoreEvent, input::Input};
 use sqlx::query;
 
 use crate::{
@@ -10,6 +15,7 @@ use crate::{
     config::Config,
     database::{DBConnKey, MonthDayDate},
     storage::{self, RemovalResult},
+    voice_clip_recorder::{VCRStateKey, VoiceClipRecorder, pcm_to_wav_bytes},
 };
 
 #[command(slash_command)]
@@ -27,6 +33,91 @@ pub async fn greet(ctx: PContext<'_>, voice_channel: Option<ChannelId>) -> anyho
     play_only_audio_optionally_in_voice_channel(ctx, input, voice_channel).await?;
 
     ctx.reply("Greeting...").await?;
+
+    Ok(())
+}
+
+#[command(
+    slash_command,
+    guild_only,
+    default_member_permissions = "ADMINISTRATOR"
+)]
+pub async fn start_surveillance(
+    ctx: PContext<'_>,
+    voice_channel: Option<ChannelId>,
+) -> anyhow::Result<()> {
+    let guild_id = ctx.guild_id().unwrap();
+    let channel_id = voice_channel
+        .or_else(|| {
+            ctx.guild()
+                .unwrap()
+                .voice_states
+                .get(&ctx.author().id)
+                .and_then(|vs| vs.channel_id)
+        })
+        .ok_or_else(|| {
+            anyhow!("Make sure you are in a voice channel or provide a voice channel.")
+        })?;
+
+    let songbird = songbird::get(ctx.serenity_context()).await.unwrap();
+    let handler_lock = songbird.join(guild_id, channel_id).await?;
+    let mut handler = handler_lock.lock().await;
+
+    let data = ctx.serenity_context().data.read().await;
+    let vcr_state = data.get::<VCRStateKey>().unwrap();
+    let vcr = VoiceClipRecorder::with_state(Arc::clone(vcr_state));
+
+    handler.add_global_event(CoreEvent::SpeakingStateUpdate.into(), vcr.clone());
+    handler.add_global_event(CoreEvent::ClientDisconnect.into(), vcr.clone());
+    handler.add_global_event(CoreEvent::VoiceTick.into(), vcr);
+
+    ctx.reply(format!(
+        "Joined voice channel and started total surveillance!"
+    ))
+    .await?;
+
+    Ok(())
+}
+
+#[command(slash_command, guild_only)]
+pub async fn leave(ctx: PContext<'_>) -> anyhow::Result<()> {
+    let songbird = songbird::get(ctx.serenity_context()).await.unwrap();
+    let guild_id = ctx.guild_id().unwrap();
+    songbird.leave(guild_id).await?;
+    ctx.reply("Leaving voice channel, surveillance is no more!")
+        .await?;
+    Ok(())
+}
+
+#[command(slash_command, guild_only)]
+pub async fn clip(ctx: PContext<'_>, member: Member) -> anyhow::Result<()> {
+    ctx.defer().await?;
+
+    let data = ctx.serenity_context().data.read().await;
+    let vcr_state = data.get::<VCRStateKey>().unwrap();
+    let user_id = member.user.id;
+
+    let maybe_pcm = {
+        let handle = vcr_state.read();
+        handle
+            .user_buffers
+            .get(&user_id)
+            .map(|buf| buf.get_linearized_pcm())
+    };
+
+    let pcm = maybe_pcm.ok_or_else(|| anyhow!("No recorder audio found for <@{}>", user_id))?;
+
+    let wav_bytes = tokio::task::spawn_blocking(move || pcm_to_wav_bytes(&pcm)).await??;
+
+    let attachment =
+        CreateAttachment::bytes(wav_bytes, format!("{}_clip.wav", member.display_name()));
+    let reply = CreateReply::default()
+        .content(format!(
+            "The last minute of audio recorded from <@{}>",
+            user_id
+        ))
+        .attachment(attachment);
+    ctx.send(reply).await?;
 
     Ok(())
 }
@@ -366,7 +457,7 @@ pub async fn set_timezone(ctx: PContext<'_>, timezone: String) -> anyhow::Result
     Ok(())
 }
 
-fn parse_hex_color(color: &str) -> anyhow::Result<u32> {
+fn parse_hex_color(color: &str) -> Result<u32, ParseIntError> {
     let color = color.strip_prefix('#').unwrap_or(color);
     let color = color.strip_prefix("0x").unwrap_or(color);
     let color = color.strip_prefix("0X").unwrap_or(color);
@@ -407,7 +498,7 @@ async fn unset_birthday_for_user(ctx: PContext<'_>, user_id: UserId) -> anyhow::
     Ok(())
 }
 
-/// Plays audio in user's voice channel, if he is connected to one
+/// Plays audio in a provided voice channel, or in user's voice channel, if he is connected to one
 async fn play_only_audio_optionally_in_voice_channel(
     ctx: PContext<'_>,
     input: Input,

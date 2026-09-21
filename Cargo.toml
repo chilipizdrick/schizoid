@@ -8,13 +8,15 @@ anyhow = "1.0.102"
 chrono = { version = "0.4.44", features = ["serde"] }
 chrono-tz = "0.10.4"
 clap = { version = "4.6.1", features = ["derive"] }
+hound = "3.5.1"
 log = "0.4.29"
 mcping = { git = "https://github.com/chilipizdrick/mcping", features = ["tokio-runtime"] }
+parking_lot = "0.12.5"
 poise = { version = "0.6.2", features = ["cache"] }
 reqwest = "0.12.2"
 serde = "1.0.228"
 serenity = { version = "0.12.5", features = ["cache"] }
-songbird = "0.6.0"
+songbird = { version = "0.6.0", features = ["receive"] }
 sqlx = { version = "0.8.6", features = [ "runtime-tokio", "sqlite", "chrono" ] }
 symphonia = { version = "0.5.3", features = ["all"] }
 tokio = {version = "1.52.3", features = ["full"] }

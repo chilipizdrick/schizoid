@@ -93,7 +93,7 @@ impl DatabaseConnection {
         let guild = self.get_guild(guild_id).await?;
 
         match guild {
-            Some(user) => Ok(user),
+            Some(guild) => Ok(guild),
             None => {
                 let guild = Guild::default_with_id(guild_id);
                 let guild_row = guild.clone().into();

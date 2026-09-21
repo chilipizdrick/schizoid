@@ -1,5 +1,6 @@
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
+use parking_lot::RwLock;
 use poise::FrameworkOptions;
 use schizoid::{
     commands::*,
@@ -8,9 +9,13 @@ use schizoid::{
     greeting_birthday_handler::GreetingBirthdayHandler,
     load_env_var,
     minecraft_server_handler::MinecraftServerHandler,
+    voice_clip_recorder::{VCRStateKey, VoiceClipRecorderState},
 };
 use serenity::all::{ClientBuilder, GatewayIntents};
-use songbird::SerenityInit;
+use songbird::{
+    SerenityInit,
+    driver::{Channels, DecodeConfig, DecodeMode, SampleRate},
+};
 use sqlx::SqlitePool;
 
 #[tokio::main]
@@ -47,6 +52,9 @@ async fn main() -> anyhow::Result<()> {
             remove_birthday_congratulation(),
             color(),
             set_timezone(),
+            start_surveillance(),
+            leave(),
+            clip(),
         ],
         ..Default::default()
     };
@@ -61,13 +69,19 @@ async fn main() -> anyhow::Result<()> {
         })
         .build();
 
+    let decode_config = DecodeConfig::new(Channels::Mono, SampleRate::Hz48000);
+    let decode_mode = DecodeMode::Decode(decode_config);
+    let songbird_config = songbird::Config::default().decode_mode(decode_mode);
+    let voice_clip_recorder_state = Arc::new(RwLock::new(VoiceClipRecorderState::default()));
+
     let token = load_env_var("DISCORD_TOKEN")?;
     let mut client_builder = ClientBuilder::new(token, intents)
         .framework(framework)
-        .register_songbird()
+        .register_songbird_from_config(songbird_config)
         .event_handler(GreetingBirthdayHandler)
         .type_map_insert::<DBConnKey>(db_conn)
-        .type_map_insert::<ConfigKey>(config);
+        .type_map_insert::<ConfigKey>(config)
+        .type_map_insert::<VCRStateKey>(voice_clip_recorder_state);
 
     if config.minecraft_server_ping.enabled {
         let address = load_env_var("MINECRAFT_SERVER_ADDRESS")?;
