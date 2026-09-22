@@ -7,6 +7,14 @@ use serenity::model::{
 use songbird::input::Input;
 use tokio::{fs, io};
 
+// TODO: implement such an interface, or something similar
+// pub trait AssetStore<K: Hash, V> {
+//     type Error;
+//     async fn save(key: K, value: File) -> Result<(), Self::Error>;
+//     async fn retrieve(key: &K) -> Result<Option<File>, Self::Error>;
+//     async fn delete(key: &K) -> Result<Option<File>, Self::Error>;
+// }
+
 pub struct Storage<'a> {
     root_dir_path: &'a str,
 }
@@ -16,21 +24,21 @@ impl<'a> Storage<'a> {
         Self { root_dir_path }
     }
 
-    pub async fn get_member_greeting(
+    pub async fn read_member_greeting(
         &self,
         guild_id: GuildId,
         user_id: UserId,
     ) -> io::Result<Input> {
         let dir_path = self.member_dir_path(Self::GREETINGS_DIR, guild_id, user_id);
         if !fs::try_exists(&dir_path).await? {
-            return self.get_guild_congratulation(guild_id).await;
+            return self.read_guild_congratulation(guild_id).await;
         }
         let file_path = Self::get_file_path(&dir_path).await?;
         let file = songbird::input::File::new(file_path);
         Ok(file.into())
     }
 
-    pub async fn set_member_greeting(
+    pub async fn save_member_greeting(
         &self,
         guild_id: GuildId,
         user_id: UserId,
@@ -41,7 +49,7 @@ impl<'a> Storage<'a> {
     }
 
     /// Returns true, if file existed, and false, if it did not
-    pub async fn remove_member_greeting(
+    pub async fn delete_member_greeting(
         &self,
         guild_id: GuildId,
         user_id: UserId,
@@ -50,31 +58,31 @@ impl<'a> Storage<'a> {
         Self::remove_dir_with_file(dir_path).await
     }
 
-    pub async fn get_guild_greeting(&self, guild_id: GuildId) -> io::Result<Input> {
+    pub async fn read_guild_greeting(&self, guild_id: GuildId) -> io::Result<Input> {
         let dir_path = self.guild_dir_path(Self::GREETINGS_DIR, guild_id);
         let file_path = Self::get_file_path(&dir_path).await?;
         let file = songbird::input::File::new(file_path);
         Ok(file.into())
     }
 
-    pub async fn set_guild_greeting(&self, guild_id: GuildId, file: File<'_>) -> io::Result<()> {
+    pub async fn save_guild_greeting(&self, guild_id: GuildId, file: File<'_>) -> io::Result<()> {
         let dir_path = self.guild_dir_path(Self::GREETINGS_DIR, guild_id);
         Self::create_file_in_directory(&dir_path, file).await
     }
 
-    pub async fn remove_guild_greeting(&self, guild_id: GuildId) -> io::Result<RemovalResult> {
+    pub async fn delete_guild_greeting(&self, guild_id: GuildId) -> io::Result<RemovalResult> {
         let dir_path = self.guild_dir_path(Self::GREETINGS_DIR, guild_id);
         Self::remove_dir_with_file(dir_path).await
     }
 
-    pub async fn get_guild_congratulation(&self, guild_id: GuildId) -> io::Result<Input> {
+    pub async fn read_guild_congratulation(&self, guild_id: GuildId) -> io::Result<Input> {
         let dir_path = self.guild_dir_path(Self::CONGRATULATIONS_DIR, guild_id);
         let file_path = Self::get_file_path(&dir_path).await?;
         let file = songbird::input::File::new(file_path);
         Ok(file.into())
     }
 
-    pub async fn set_guild_congratulation(
+    pub async fn save_guild_congratulation(
         &self,
         guild_id: GuildId,
         file: File<'_>,
@@ -83,7 +91,7 @@ impl<'a> Storage<'a> {
         Self::create_file_in_directory(&dir_path, file).await
     }
 
-    pub async fn remove_guild_congratulation(
+    pub async fn delete_guild_congratulation(
         &self,
         guild_id: GuildId,
     ) -> io::Result<RemovalResult> {
@@ -95,9 +103,14 @@ impl<'a> Storage<'a> {
     const CONGRATULATIONS_DIR: &'static str = "birthday_congratulations";
 
     fn guild_dir_path(&self, subdir: &str, guild_id: GuildId) -> PathBuf {
-        [&self.root_dir_path, subdir, &guild_id.to_string()]
-            .iter()
-            .collect()
+        [
+            &self.root_dir_path,
+            subdir,
+            &guild_id.to_string(),
+            "guild_specific",
+        ]
+        .iter()
+        .collect()
     }
 
     fn member_dir_path(&self, subdir: &str, guild_id: GuildId, user_id: UserId) -> PathBuf {
@@ -105,6 +118,7 @@ impl<'a> Storage<'a> {
             &self.root_dir_path,
             subdir,
             &guild_id.to_string(),
+            "member_specific",
             &user_id.to_string(),
         ]
         .iter()

@@ -17,6 +17,7 @@ Bot expects the following environment variables to be set:
 - DATABASE_URL - url of SQLite database to connect to
 - DISCORD_TOKEN - self explanatory
 - MINECRAFT_SERVER_ADDRESS - address of Minecraft server to check status of (if this feature is enabled in config)
+- USER_OWNER_ID - discord user id of bot owner (optional)
 
 User should also provide a custom config in toml format (and provide path to it to the bot via `--config` flag):
 

@@ -71,8 +71,8 @@ async fn voice_state_update_fallible(
     };
 
     let audio_file = match strategy {
-        Strategy::Greeting => storage.get_member_greeting(guild_id, user_id).await?,
-        Strategy::Congratulation => storage.get_guild_congratulation(guild_id).await?,
+        Strategy::Greeting => storage.read_member_greeting(guild_id, user_id).await?,
+        Strategy::Congratulation => storage.read_guild_congratulation(guild_id).await?,
     };
     let client = songbird::get(&ctx).await.unwrap();
 
