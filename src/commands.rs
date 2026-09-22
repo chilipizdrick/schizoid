@@ -163,7 +163,8 @@ pub async fn surveillance_start(
 
     handler.add_global_event(CoreEvent::SpeakingStateUpdate.into(), vcr.clone());
     handler.add_global_event(CoreEvent::ClientDisconnect.into(), vcr.clone());
-    handler.add_global_event(CoreEvent::VoiceTick.into(), vcr);
+    handler.add_global_event(CoreEvent::VoiceTick.into(), vcr.clone());
+    handler.add_global_event(CoreEvent::DriverDisconnect.into(), vcr);
 
     ctx.reply("Joined voice channel and started surveillance!")
         .await?;
@@ -197,14 +198,6 @@ pub async fn clip(ctx: PContext<'_>, #[description = "User to clip"] user: User)
             .ok_or_else(|| anyhow!("No recorded audio found for <@{}>!", user_id))?
             .to_ogg_bytes()?
     };
-
-    // let clip_duration_secs = (ogg_bytes.len() as f64 / SAMPLE_RATE as f64).ceil() as u32;
-    // let time_str = match clip_duration_secs {
-    //     60 => "1 minute".to_string(),
-    //     secs => format!("{} seconds", secs),
-    // };
-
-    // let wav_bytes = tokio::task::spawn_blocking(move || pcm_to_wav_bytes(&ogg_bytes)).await??;
 
     let attachment =
         CreateAttachment::bytes(ogg_bytes, format!("{}_clip.ogg", user.display_name()));

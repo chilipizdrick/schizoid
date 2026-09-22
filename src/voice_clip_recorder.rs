@@ -57,6 +57,7 @@ impl VoiceEventHandler for VoiceClipRecorder {
                 if let Some(uid) = speaking.user_id {
                     let uid = UserId::from(uid.0);
                     self.state.ssrc_map.write().insert(speaking.ssrc, uid);
+                    self.state.buffers.write().entry(uid).or_default();
                 }
             }
 
@@ -84,17 +85,22 @@ pub const SAMPLES_PER_FRAME: u64 = 960; // 48kHz * 0.02s
 pub const SAMPLE_RATE: u32 = 48_000;
 
 pub struct UserOpusBuffer {
-    /// Rolling buffer of raw Opus frames
     pub frames: VecDeque<Vec<u8>>,
     pub last_seq: Option<u16>,
 }
 
-impl UserOpusBuffer {
-    pub fn new() -> Self {
+impl Default for UserOpusBuffer {
+    fn default() -> Self {
         Self {
             frames: VecDeque::with_capacity(MAX_FRAMES),
             last_seq: None,
         }
+    }
+}
+
+impl UserOpusBuffer {
+    pub fn new() -> Self {
+        Default::default()
     }
 
     /// Pushes an incoming Opus frame and accounts for missed packets via sequence numbers.
@@ -127,10 +133,8 @@ impl UserOpusBuffer {
         let mut out = Cursor::new(Vec::with_capacity(self.frames.len() * 120));
         let mut writer = PacketWriter::new(&mut out);
 
-        // 1. Write the mandatory headers
         write_ogg_opus_headers(&mut writer, stream_serial)?;
 
-        // 2. Mux audio packets with monotonic granule positions
         let mut granule_pos: u64 = 0;
         let total = self.frames.len();
 
@@ -138,10 +142,8 @@ impl UserOpusBuffer {
             granule_pos += SAMPLES_PER_FRAME;
 
             let end_info = if i == total - 1 {
-                // Final packet sets EOS (End of Stream) flag
                 PacketWriteEndInfo::EndStream
             } else if (i + 1) % 50 == 0 {
-                // Flush page every 1 second (50 frames) for clean seeking
                 PacketWriteEndInfo::EndPage
             } else {
                 PacketWriteEndInfo::NormalPacket
