@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE guilds SET timezone = null WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "068e266d734e706940da2bc544ee2f0a232c707baa462e2f7b5c16789ddc7132"
+}
