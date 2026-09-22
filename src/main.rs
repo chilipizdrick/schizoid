@@ -63,7 +63,7 @@ async fn main() -> anyhow::Result<()> {
         })
         .build();
 
-    let songbird_config = songbird::Config::default().decode_mode(DecodeMode::Pass);
+    let songbird_config = songbird::Config::default().decode_mode(DecodeMode::Decrypt);
 
     let token = load_env_var("DISCORD_TOKEN")?;
     let mut client_builder = ClientBuilder::new(token, intents)

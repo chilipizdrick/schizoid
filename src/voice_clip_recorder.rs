@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 use std::io::{Cursor, Write};
+use std::time::Instant;
 use std::{collections::HashMap, io, sync::Arc};
 
 use byteorder::{LittleEndian, WriteBytesExt};
@@ -40,15 +41,22 @@ impl VoiceEventHandler for VoiceClipRecorder {
                 let ssrc_map = self.state.ssrc_map.read();
                 let mut buffers = self.state.buffers.write();
                 for (ssrc, voice_data) in &tick.speaking {
-                    if let Some(packet) = &voice_data.packet
-                        && let Some(uid) = ssrc_map.get(&ssrc)
-                    {
-                        let rtp = packet.rtp();
-                        let seq = rtp.get_sequence().0.0;
-                        let payload = rtp.payload();
+                    if let Some(uid) = ssrc_map.get(ssrc) {
+                        if let Some(rtp_data) = &voice_data.packet {
+                            let rtp = rtp_data.rtp();
+                            let raw_payload = rtp.payload();
 
-                        let buf = buffers.entry(*uid).or_insert_with(UserOpusBuffer::new);
-                        buf.push_frame(payload, seq);
+                            // Slicing out the real Opus frame
+                            let start = rtp_data.payload_offset;
+                            let end = raw_payload.len().saturating_sub(rtp_data.payload_end_pad);
+
+                            if start < end && end <= raw_payload.len() {
+                                let opus_frame: &[u8] = &raw_payload[start..end];
+
+                                let buf = buffers.entry(*uid).or_default();
+                                buf.push_frame(opus_frame);
+                            }
+                        }
                     }
                 }
             }
@@ -78,22 +86,22 @@ impl VoiceEventHandler for VoiceClipRecorder {
     }
 }
 
-pub const CHANNELS: u8 = 1;
+pub const CHANNELS: u8 = 2;
 pub const MAX_FRAMES: usize = 3000; // 60s * 50 frames/sec (20ms each)
-pub const OPUS_SILENCE_FRAME: [u8; 1] = [0xF8];
+pub const OPUS_SILENCE_FRAME: [u8; 3] = [0xF8, 0xFF, 0xFE];
 pub const SAMPLES_PER_FRAME: u64 = 960; // 48kHz * 0.02s
 pub const SAMPLE_RATE: u32 = 48_000;
 
 pub struct UserOpusBuffer {
     pub frames: VecDeque<Vec<u8>>,
-    pub last_seq: Option<u16>,
+    pub last_seen: Option<Instant>,
 }
 
 impl Default for UserOpusBuffer {
     fn default() -> Self {
         Self {
             frames: VecDeque::with_capacity(MAX_FRAMES),
-            last_seq: None,
+            last_seen: None,
         }
     }
 }
@@ -103,21 +111,23 @@ impl UserOpusBuffer {
         Default::default()
     }
 
-    /// Pushes an incoming Opus frame and accounts for missed packets via sequence numbers.
-    pub fn push_frame(&mut self, payload: &[u8], seq: u16) {
-        if let Some(prev_seq) = self.last_seq {
-            // RTP sequence number delta (handles 16-bit wrapping)
-            let gap = seq.wrapping_sub(prev_seq).saturating_sub(1);
+    pub fn push_frame(&mut self, payload: &[u8]) {
+        let now = Instant::now();
 
-            // If packets were dropped or silence occurred, insert silence frames
-            let gap = (gap as usize).min(MAX_FRAMES);
-            for _ in 0..gap {
-                self.push_raw(OPUS_SILENCE_FRAME.to_vec());
+        if let Some(last) = self.last_seen {
+            let elapsed_ms = now.duration_since(last).as_millis() as usize;
+            if elapsed_ms > 30 {
+                // How many 20ms frames were skipped
+                let missing_frames = (elapsed_ms - 20) / 20;
+                let fill_count = missing_frames.min(MAX_FRAMES);
+                for _ in 0..fill_count {
+                    self.push_raw(OPUS_SILENCE_FRAME.to_vec());
+                }
             }
         }
 
         self.push_raw(payload.to_vec());
-        self.last_seq = Some(seq);
+        self.last_seen = Some(now);
     }
 
     fn push_raw(&mut self, frame: Vec<u8>) {
@@ -129,6 +139,13 @@ impl UserOpusBuffer {
 
     /// Muxes all buffered Opus frames into a playable in-memory Ogg Opus file.
     pub fn to_ogg_bytes(&self) -> io::Result<Vec<u8>> {
+        if self.frames.is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "No audio recorded",
+            ));
+        }
+
         let stream_serial: u32 = 1337;
         let mut out = Cursor::new(Vec::with_capacity(self.frames.len() * 120));
         let mut writer = PacketWriter::new(&mut out);
@@ -149,7 +166,7 @@ impl UserOpusBuffer {
                 PacketWriteEndInfo::NormalPacket
             };
 
-            writer.write_packet(frame.clone(), stream_serial, end_info, granule_pos)?;
+            writer.write_packet(frame.as_slice(), stream_serial, end_info, granule_pos)?;
         }
 
         Ok(out.into_inner())
