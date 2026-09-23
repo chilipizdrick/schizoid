@@ -153,18 +153,20 @@ pub async fn surveillance_start(
             anyhow!("Make sure you are in a voice channel or provide a voice channel.")
         })?;
 
-    let songbird = songbird::get(ctx.serenity_context()).await.unwrap();
-    let handler_lock = songbird.join(guild_id, channel_id).await?;
-    let mut handler = handler_lock.lock().await;
-
     let data = ctx.serenity_context().data.read().await;
     let vcr_state = data.get::<VCRStateKey>().unwrap();
     let vcr = VoiceClipRecorder::with_state(vcr_state.clone());
 
-    handler.add_global_event(CoreEvent::SpeakingStateUpdate.into(), vcr.clone());
-    handler.add_global_event(CoreEvent::ClientDisconnect.into(), vcr.clone());
-    handler.add_global_event(CoreEvent::VoiceTick.into(), vcr.clone());
-    handler.add_global_event(CoreEvent::DriverDisconnect.into(), vcr);
+    let songbird = songbird::get(ctx.serenity_context()).await.unwrap();
+    let (info, call) = songbird.join_gateway(guild_id, channel_id).await?;
+    let mut call = call.lock().await;
+
+    call.add_global_event(CoreEvent::SpeakingStateUpdate.into(), vcr.clone());
+    call.add_global_event(CoreEvent::ClientDisconnect.into(), vcr.clone());
+    call.add_global_event(CoreEvent::VoiceTick.into(), vcr.clone());
+    call.add_global_event(CoreEvent::DriverDisconnect.into(), vcr);
+
+    call.connect(info);
 
     ctx.reply("Joined voice channel and started surveillance!")
         .await?;
@@ -191,16 +193,21 @@ pub async fn clip(ctx: PContext<'_>, #[description = "User to clip"] user: User)
     let vcr_state = data.get::<VCRStateKey>().unwrap();
     let user_id = user.id;
 
-    let ogg_bytes = {
+    let maybe_wav_bytes = {
         let buffers = vcr_state.buffers.read();
-        buffers
-            .get(&user_id)
-            .ok_or_else(|| anyhow!("No recorded audio found for <@{}>!", user_id))?
-            .to_ogg_bytes()?
+        buffers.get(&user_id).and_then(|buf| buf.to_wav_bytes())
     };
 
-    let attachment =
-        CreateAttachment::bytes(ogg_bytes, format!("{}_clip.ogg", user.display_name()));
+    let wav_bytes = match maybe_wav_bytes {
+        Some(data) => data,
+        None => {
+            ctx.reply(format!("No recorded audio found for <@{user_id}>."))
+                .await?;
+            return Ok(());
+        }
+    };
+
+    let attachment = CreateAttachment::bytes(wav_bytes, format!("{}.wav", user.display_name()));
 
     let reply = CreateReply::default()
         .content(format!(

@@ -14,7 +14,10 @@ use serenity::{
     all::{ClientBuilder, GatewayIntents},
     model::id::UserId,
 };
-use songbird::{SerenityInit, driver::DecodeMode};
+use songbird::{
+    SerenityInit,
+    driver::{Channels, DecodeConfig, DecodeMode, SampleRate},
+};
 use sqlx::SqlitePool;
 
 #[tokio::main]
@@ -63,7 +66,9 @@ async fn main() -> anyhow::Result<()> {
         })
         .build();
 
-    let songbird_config = songbird::Config::default().decode_mode(DecodeMode::Decrypt);
+    let decode_config = DecodeConfig::new(Channels::Mono, SampleRate::Hz48000);
+    let decode_mode = DecodeMode::Decode(decode_config);
+    let songbird_config = songbird::Config::default().decode_mode(decode_mode);
 
     let token = load_env_var("DISCORD_TOKEN")?;
     let mut client_builder = ClientBuilder::new(token, intents)
