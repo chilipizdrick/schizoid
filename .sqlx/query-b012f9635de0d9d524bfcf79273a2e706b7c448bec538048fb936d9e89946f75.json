@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE guilds SET minecraft_text_channel_id = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "b012f9635de0d9d524bfcf79273a2e706b7c448bec538048fb936d9e89946f75"
+}

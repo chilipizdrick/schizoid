@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO guilds (id, greeting_enabled, birthday_enabled, greeting_interval, timezone, minecraft_text_channel_id)\n                      VALUES ( ?, ?, ?, ?, ?, ? )",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "05d542cd14d4dc37215a8f8e8d7a6269cd2ed6b89bdaa998ae2d958a61deb4f8"
+}
