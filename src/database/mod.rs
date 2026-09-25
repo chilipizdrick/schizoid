@@ -5,6 +5,7 @@ use chrono::{DateTime, Datelike, NaiveDateTime, TimeDelta, TimeZone, Utc};
 use chrono_tz::Tz;
 use serenity::{
     all::{GuildId, UserId},
+    model::id::ChannelId,
     prelude::TypeMapKey,
 };
 use sqlx::{SqlitePool, query, query_as};
@@ -103,16 +104,18 @@ impl DatabaseConnection {
                     birthday_enabled,
                     greeting_interval,
                     timezone,
+                    minecraft_text_channel_id,
                 } = guild_row;
 
                 query!(
-                    r#"INSERT INTO guilds (id, greeting_enabled, birthday_enabled, greeting_interval, timezone)
-                      VALUES ( ?, ?, ?, ?, ? )"#,
+                    r#"INSERT INTO guilds (id, greeting_enabled, birthday_enabled, greeting_interval, timezone, minecraft_text_channel_id)
+                      VALUES ( ?, ?, ?, ?, ?, ? )"#,
                     id,
                     greeting_enabled,
                     birthday_enabled,
                     greeting_interval,
-                    timezone
+                    timezone,
+                    minecraft_text_channel_id,
                 )
                 .execute(&self.pool)
                 .await?;
@@ -273,6 +276,7 @@ pub struct Guild {
     pub birthday_enabled: bool,
     pub greeting_interval: TimeDelta,
     pub timezone: Tz,
+    pub minecraft_text_channel_id: Option<ChannelId>,
 }
 
 impl Guild {
@@ -283,6 +287,7 @@ impl Guild {
             birthday_enabled: true,
             greeting_interval: TimeDelta::days(1),
             timezone: Tz::UTC,
+            minecraft_text_channel_id: None,
         }
     }
 }
@@ -297,11 +302,15 @@ impl TryFrom<GuildRow> for Guild {
             birthday_enabled,
             greeting_interval,
             timezone,
+            minecraft_text_channel_id,
         } = value;
 
         let id = id.parse()?;
         let timezone = timezone.parse()?;
         let greeting_interval = TimeDelta::seconds(greeting_interval);
+        let minecraft_text_channel_id = minecraft_text_channel_id
+            .map(|id_str| -> Result<ChannelId, Self::Error> { Ok(ChannelId::new(id_str.parse()?)) })
+            .transpose()?;
 
         Ok(Self {
             id,
@@ -309,6 +318,7 @@ impl TryFrom<GuildRow> for Guild {
             birthday_enabled,
             greeting_interval,
             timezone,
+            minecraft_text_channel_id,
         })
     }
 }
@@ -320,6 +330,7 @@ pub struct GuildRow {
     birthday_enabled: bool,
     greeting_interval: i64,
     timezone: String,
+    minecraft_text_channel_id: Option<String>,
 }
 
 impl From<Guild> for GuildRow {
@@ -330,11 +341,13 @@ impl From<Guild> for GuildRow {
             birthday_enabled,
             greeting_interval,
             timezone,
+            minecraft_text_channel_id,
         } = value;
 
         let id = id.to_string();
         let timezone = timezone.to_string();
         let greeting_interval = greeting_interval.num_seconds();
+        let minecraft_text_channel_id = minecraft_text_channel_id.map(|id| id.to_string());
 
         Self {
             id,
@@ -342,6 +355,7 @@ impl From<Guild> for GuildRow {
             birthday_enabled,
             greeting_interval,
             timezone,
+            minecraft_text_channel_id,
         }
     }
 }

@@ -48,6 +48,7 @@ async fn main() -> anyhow::Result<()> {
         guild(),
         birthday(),
         color(),
+        minecraft(),
     ];
 
     let options = FrameworkOptions {
@@ -83,8 +84,13 @@ async fn main() -> anyhow::Result<()> {
         let address = load_env_var("MINECRAFT_SERVER_ADDRESS")?;
         let ping_timeout = Duration::from_millis(config.minecraft_server_ping.ping_timeout_ms);
         let ping_interval = Duration::from_millis(config.minecraft_server_ping.ping_interval_ms);
-        let mc_server_ping_handler =
-            MinecraftServerHandler::new(address, ping_timeout, ping_interval);
+        let failed_pings_before_alert = config.minecraft_server_ping.failed_pings_before_alert;
+        let mc_server_ping_handler = MinecraftServerHandler::new(
+            address,
+            ping_timeout,
+            ping_interval,
+            failed_pings_before_alert,
+        );
 
         client_builder = client_builder.event_handler(mc_server_ping_handler);
     }

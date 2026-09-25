@@ -41,11 +41,12 @@ pub struct TrustedConfig {
 pub struct MinecraftServerPingConfig {
     #[serde(default = "default_enabled")]
     pub enabled: bool,
-    // pub server_address: String,
     #[serde(default = "default_ping_timeout_ms")]
     pub ping_timeout_ms: u64,
     #[serde(default = "default_ping_interval_ms")]
     pub ping_interval_ms: u64,
+    #[serde(default = "default_failed_pings_before_alert")]
+    pub failed_pings_before_alert: u32,
 }
 
 fn default_enabled() -> bool {
@@ -58,6 +59,10 @@ fn default_ping_timeout_ms() -> u64 {
 
 fn default_ping_interval_ms() -> u64 {
     10_000
+}
+
+fn default_failed_pings_before_alert() -> u32 {
+    3
 }
 
 pub struct ConfigKey;

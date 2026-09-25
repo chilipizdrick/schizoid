@@ -30,4 +30,5 @@ max_attachment_count = 100       # Necessary | Maximum number of attachments for
 enabled = true           # Optional | Enables checking of Minecraft server status (ping)
 ping_timeout_ms = 5000   # Optional | Timeout for pinging Minecraft server (in milliseconds)
 ping_interval_ms = 10000 # Optional | Interval for pinging Minecraft server (in milliseconds)
+failed_pings_before_alert = 5 # Optional | Number of failed minecraft server pings before the alert is sent to server's minecraft text channel, if set
 ```

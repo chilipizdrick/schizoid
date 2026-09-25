@@ -6,7 +6,7 @@ use poise::{CreateReply, command};
 use serenity::{
     all::{Attachment, ChannelId, Color, EditRole, GuildId, UserId},
     builder::CreateAttachment,
-    model::user::User,
+    model::{channel::GuildChannel, user::User},
 };
 use songbird::{CoreEvent, input::Input};
 use sqlx::query;
@@ -649,6 +649,85 @@ pub async fn color_remove(ctx: PContext<'_>) -> Result<()> {
     } else {
         ctx.reply("Your role was not found").await?;
     }
+
+    Ok(())
+}
+
+#[command(
+    slash_command,
+    guild_only,
+    subcommand_required,
+    subcommands("minecraft_channel"),
+    default_member_permissions = "ADMINISTRATOR"
+)]
+pub async fn minecraft(_: PContext<'_>) -> Result<()> {
+    Ok(())
+}
+
+#[command(
+    slash_command,
+    guild_only,
+    subcommand_required,
+    subcommands("minecraft_channel_set", "minecraft_channel_remove"),
+    rename = "channel"
+)]
+pub async fn minecraft_channel(_: PContext<'_>) -> Result<()> {
+    Ok(())
+}
+
+/// Set channel to be used as a relay of minecraft server events / for chat sync
+#[command(slash_command, guild_only, rename = "set")]
+pub async fn minecraft_channel_set(
+    ctx: PContext<'_>,
+    #[description = "Text channel to use as minecraft server news / chat sync channel"]
+    channel: GuildChannel,
+) -> Result<()> {
+    if !channel.is_text_based() {
+        return Err(anyhow!("Only text based channels are supported"));
+    }
+
+    let data = ctx.serenity_context().data.read().await;
+    let db_conn = data.get::<DBConnKey>().unwrap();
+
+    let guild_id = ctx.guild_id().unwrap();
+
+    let guild_id_str = guild_id.to_string();
+    let channel_id_str = channel.id.to_string();
+
+    query!(
+        "UPDATE guilds SET minecraft_text_channel_id = ? WHERE id = ?",
+        channel_id_str,
+        guild_id_str
+    )
+    .execute(&db_conn.pool)
+    .await?;
+
+    ctx.reply(format!(
+        "Set server's minecraft channel to <#{}>.",
+        channel.id
+    ))
+    .await?;
+
+    Ok(())
+}
+
+/// Unset minecraft server relay channel
+#[command(slash_command, guild_only, rename = "remove")]
+pub async fn minecraft_channel_remove(ctx: PContext<'_>) -> Result<()> {
+    let data = ctx.serenity_context().data.read().await;
+    let db_conn = data.get::<DBConnKey>().unwrap();
+
+    let guild_id = ctx.guild_id().unwrap();
+    let guild_id_str = guild_id.to_string();
+
+    query!(
+        "UPDATE guilds SET minecraft_text_channel_id = NULL WHERE id = ?",
+        guild_id_str
+    )
+    .execute(&db_conn.pool)
+    .await?;
+
+    ctx.reply("Unset server's minecraft channel.").await?;
 
     Ok(())
 }
