@@ -139,7 +139,7 @@ pub async fn greeting_download(ctx: PContext<'_>) -> Result<()> {
         .await
         .map_err(|_| anyhow!("Could not find your greeting in storage, is it set?"))?;
 
-    let mut greeting_file = File::create_new(&greeting_filepath).await?;
+    let mut greeting_file = File::open(&greeting_filepath).await?;
 
     // UNWRAP: Here the path will never contain `..` at the end, thus it is safe to unwrap here.
     let os_file_name = greeting_filepath.file_name().unwrap();
