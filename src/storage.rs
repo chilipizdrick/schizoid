@@ -24,6 +24,15 @@ impl<'a> Storage<'a> {
         Self { root_dir_path }
     }
 
+    pub async fn get_member_greering_file_path(
+        &self,
+        guild_id: GuildId,
+        user_id: UserId,
+    ) -> io::Result<PathBuf> {
+        let dir_path = self.member_dir_path(Self::GREETINGS_DIR, guild_id, user_id);
+        Self::get_file_path(&dir_path).await
+    }
+
     pub async fn read_member_greeting(
         &self,
         guild_id: GuildId,

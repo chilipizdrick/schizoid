@@ -1,4 +1,4 @@
-use std::num::ParseIntError;
+use std::{num::ParseIntError, os::unix::fs::MetadataExt};
 
 use anyhow::{Result, anyhow};
 use chrono_tz::Tz;
@@ -10,6 +10,7 @@ use serenity::{
 };
 use songbird::{CoreEvent, input::Input};
 use sqlx::query;
+use tokio::{fs::File, io::AsyncReadExt};
 
 use crate::{
     PContext,
@@ -30,7 +31,13 @@ pub async fn ping(ctx: PContext<'_>) -> Result<()> {
     slash_command,
     guild_only,
     subcommand_required,
-    subcommands("greeting_play", "greeting_toggle", "greeting_set", "greeting_remove")
+    subcommands(
+        "greeting_play",
+        "greeting_toggle",
+        "greeting_set",
+        "greeting_remove",
+        "greeting_download"
+    )
 )]
 pub async fn greeting(_: PContext<'_>) -> Result<()> {
     Ok(())
@@ -118,6 +125,43 @@ pub async fn greeting_remove(ctx: PContext<'_>) -> Result<()> {
     };
 
     ctx.reply(reply).await?;
+    Ok(())
+}
+
+#[command(slash_command, guild_only, ephemeral, rename = "download")]
+pub async fn greeting_download(ctx: PContext<'_>) -> Result<()> {
+    let guild_id = ctx.guild_id().unwrap();
+    let user_id = ctx.author().id;
+
+    let storage = get_config(ctx).await.storage();
+    let greeting_filepath = storage
+        .get_member_greering_file_path(guild_id, user_id)
+        .await
+        .map_err(|_| anyhow!("Could not find your greeting in storage, is it set?"))?;
+
+    let mut greeting_file = File::create_new(&greeting_filepath).await?;
+
+    // UNWRAP: Here the path will never contain `..` at the end, thus it is safe to unwrap here.
+    let os_file_name = greeting_filepath.file_name().unwrap();
+    let file_name = os_file_name.to_str().ok_or_else(|| {
+        anyhow!("Greeting file name is (somehow) not UTF-8, cannot create attachment.")
+    })?;
+
+    let file_size = greeting_file
+        .metadata()
+        .await
+        .map(|meta| meta.size() as usize)
+        .unwrap_or(0);
+    let mut greeting_bytes = Vec::with_capacity(file_size);
+    greeting_file.read_to_end(&mut greeting_bytes).await?;
+
+    let attachment = CreateAttachment::bytes(greeting_bytes, file_name);
+
+    let reply = CreateReply::default()
+        .content(format!("<@{user_id}>'s greeting.",))
+        .attachment(attachment);
+    ctx.send(reply).await?;
+
     Ok(())
 }
 

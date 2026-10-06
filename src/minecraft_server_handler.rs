@@ -175,14 +175,15 @@ async fn alert_all_guilds_minecraft_server_status(
 
     let futures = records
         .into_iter()
-        .map(|record| {
-            // In general it should be impossible for us to fail parsing id here
-            record.minecraft_text_channel_id.unwrap().parse().map(|id| {
-                let channel_id = ChannelId::new(id);
-                channel_id.send_message(&ctx.http, status.clone())
-            })
+        .flat_map(|record| {
+            record
+                .minecraft_text_channel_id
+                .and_then(|id| id.parse().ok())
         })
-        .flatten();
+        .map(|id| {
+            let channel_id = ChannelId::new(id);
+            channel_id.send_message(&ctx.http, status.clone())
+        });
 
     for res in join_all(futures).await {
         if let Err(err) = res {
