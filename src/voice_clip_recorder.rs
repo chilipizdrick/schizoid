@@ -1,8 +1,10 @@
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Instant;
 
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
+use serenity::model::id::GuildId;
 use serenity::{all::prelude::TypeMapKey, async_trait, model::id::UserId};
 use songbird::{Event, EventContext, EventHandler as VoiceEventHandler};
 
@@ -16,8 +18,33 @@ const SAMPLE_RATE: u32 = 48_000;
 
 #[derive(Default)]
 pub struct VoiceClipRecorderState {
-    pub ssrc_map: RwLock<HashMap<u32, UserId>>,
-    pub buffers: RwLock<HashMap<UserId, UserAudioBuffer>>,
+    ssrc_map: RwLock<HashMap<u32, UserId>>,
+    buffers: RwLock<HashMap<UserId, Mutex<UserAudioBuffer>>>,
+    active_guilds: RwLock<HashSet<GuildId>>,
+}
+
+impl VoiceClipRecorderState {
+    pub fn is_running_in_guild(&self, guild_id: &GuildId) -> bool {
+        self.active_guilds.read().contains(guild_id)
+    }
+
+    pub fn set_running_in_guild(&self, guild_id: GuildId, is_running: bool) {
+        let mut active_guilds = self.active_guilds.write();
+        if is_running {
+            active_guilds.insert(guild_id);
+        } else {
+            active_guilds.remove(&guild_id);
+        }
+    }
+
+    /// Returns [`None`] if there is no buffer found with user's voice audio
+    // NOTE: this operation may take some time, since we are copying approximately 5.5 MiB at worst
+    pub fn copy_user_buffer_as_wav_bytes(&self, user_id: &UserId) -> Option<Vec<u8>> {
+        let buffers = self.buffers.read();
+        buffers
+            .get(&user_id)
+            .and_then(|buf| buf.lock().to_wav_bytes())
+    }
 }
 
 #[derive(Clone)]
@@ -51,7 +78,7 @@ impl VoiceEventHandler for VoiceClipRecorder {
                     if let Some(uid) = ssrc_map.get(ssrc) {
                         if let Some(decoded) = &voice_data.decoded_voice {
                             let buf = buffers.entry(*uid).or_default();
-                            buf.push_frame(decoded, now);
+                            buf.lock().push_frame(decoded, now);
                         }
                     }
                 }

@@ -199,6 +199,12 @@ pub async fn surveillance_start(
 
     let data = ctx.serenity_context().data.read().await;
     let vcr_state = data.get::<VCRStateKey>().unwrap();
+    let is_vcr_running = vcr_state.is_running_in_guild(&guild_id);
+    if is_vcr_running {
+        ctx.reply("Surveillance has already been started.").await?;
+        return Ok(());
+    }
+
     let vcr = VoiceClipRecorder::with_state(vcr_state.clone());
 
     let songbird = songbird::get(ctx.serenity_context()).await.unwrap();
@@ -212,6 +218,8 @@ pub async fn surveillance_start(
 
     call.connect(info);
 
+    vcr_state.set_running_in_guild(guild_id, true);
+
     ctx.reply("Joined voice channel and started surveillance!")
         .await?;
 
@@ -221,10 +229,24 @@ pub async fn surveillance_start(
 /// Stop recording up to the last minute of users' audio in voice channel
 #[command(slash_command, guild_only, rename = "stop")]
 pub async fn surveillance_stop(ctx: PContext<'_>) -> Result<()> {
-    let songbird = songbird::get(ctx.serenity_context()).await.unwrap();
+    ctx.defer().await?;
+
     let guild_id = ctx.guild_id().unwrap();
-    songbird.remove(guild_id).await?;
-    ctx.reply("Surveillance is no more!").await?;
+
+    let data = ctx.serenity_context().data.read().await;
+    let vcr_state = data.get::<VCRStateKey>().unwrap();
+    let is_vcr_running = vcr_state.is_running_in_guild(&guild_id);
+
+    if is_vcr_running {
+        let songbird = songbird::get(ctx.serenity_context()).await.unwrap();
+        songbird.remove(guild_id).await?;
+        vcr_state.set_running_in_guild(guild_id, false);
+        ctx.reply("Surveillance is no more!").await?;
+    } else {
+        ctx.reply("There is no active surveillance on your server.")
+            .await?;
+    }
+
     Ok(())
 }
 
@@ -237,12 +259,7 @@ pub async fn clip(ctx: PContext<'_>, #[description = "User to clip"] user: User)
     let vcr_state = data.get::<VCRStateKey>().unwrap();
     let user_id = user.id;
 
-    let maybe_wav_bytes = {
-        let buffers = vcr_state.buffers.read();
-        buffers.get(&user_id).and_then(|buf| buf.to_wav_bytes())
-    };
-
-    let wav_bytes = match maybe_wav_bytes {
+    let wav_bytes = match vcr_state.copy_user_buffer_as_wav_bytes(&user_id) {
         Some(data) => data,
         None => {
             ctx.reply(format!("No recorded audio found for <@{user_id}>."))
